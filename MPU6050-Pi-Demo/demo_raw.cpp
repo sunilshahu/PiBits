@@ -62,16 +62,17 @@ void loop() {
 	double_gy = ((double)gy)/gyro_sensitivity_250;
 	double_gz = ((double)gz)/gyro_sensitivity_250;
 	
+	/* method 1 == accel works good, but pitch<->roll*/
 	pitch_gyro = (double_gy*total_useconds)/1000000;
 	roll_gyro = (double_gx*total_useconds)/1000000;
 
-	/* accel works good, but pitch<->roll*/
 	pitch_accel = atan(double_ay/sqrt(double_ax*double_ax + double_az*double_az))*180.0/PI;
 	roll_accel = atan(double_ax/double_az)*180.0/PI;
 
 	pitch = 0.98*(pitch + pitch_gyro) + 0.02*pitch_accel;
 	roll = 0.98*(roll + roll_gyro) + 0.02*roll_accel;
-	printf("diff: %ld ,roll    : %-6f pitch    : %-6f\n", total_useconds, roll, pitch);
+	printf("diff: %ld    roll : %-6f    pitch : %-6f\n", total_useconds, roll, pitch);
+	/* Method 1 */
 }
 
 int main()

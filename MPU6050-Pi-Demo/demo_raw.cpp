@@ -14,22 +14,45 @@ MPU6050 accelgyro;
 
 int gyro_sensitivity_250;
 int acc_sensitivity_fs_2;
-double double_ax;
-double double_ay;
-double double_az;
-double double_gx;
-double double_gy;
-double double_gz;
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
 double pitch = 0.0, roll = 0.0;
-double pitch_cmp, roll_cmp;
-double pitch_gyro;
-double roll_gyro;
-double pitch_accel;
-double roll_accel;
 struct timeval start, end;
 long mtime, seconds, useconds, total_useconds;
+double acc_data[3], gyr_data[3];
+double PI=(double)(3.1415926535);
+
+
+void calculate_dt()
+{
+	gettimeofday(&end, NULL);
+	seconds  = end.tv_sec  - start.tv_sec;
+	useconds = end.tv_usec - start.tv_usec;
+	if (useconds < 0) {
+		useconds = 1000000 + useconds;
+		seconds--;
+	}	
+	start = end;
+	total_useconds = seconds * 1000000 + useconds;
+}
+
+void complementary_filter(double acc_data[3], double gyr_data[3], long dt, double *pitch, double *roll)
+{
+	double pitchAcc, rollAcc;               
+
+	// Integrate the gyroscope data -> int(angularSpeed) = angle
+	*pitch += (double)gyr_data[0] * dt / 1000000; // Angle around the X-axis
+	*roll -= (double)gyr_data[1] * dt / 1000000;    // Angle around the Y-axis
+	//printf("roll : %-6f    pitch : %-6f\n", *roll, *pitch);
+
+	// Turning around the X axis results in a vector on the Y-axis
+	pitchAcc = atan2((double)acc_data[1], (double)acc_data[2]) * 180 / PI;
+	*pitch = *pitch * 0.98 + pitchAcc * 0.02;
+
+	// Turning around the Y axis results in a vector on the X-axis
+	rollAcc = atan2((double)acc_data[0], (double)acc_data[2]) * 180 / PI;
+	*roll = *roll * 0.98 + rollAcc * 0.02;
+} 
 
 void setup() {
 	// initialize device
@@ -45,40 +68,26 @@ void setup() {
 }
 
 void loop() {
-	double PI=(double)(3.1415);
 	// read raw accel/gyro measurements from device
 	accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-	gettimeofday(&end, NULL);
-	seconds  = end.tv_sec  - start.tv_sec;
-	useconds = end.tv_usec - start.tv_usec;
-	start = end;
+	calculate_dt();
 
-	total_useconds = seconds * 1000000 + useconds;
-
-	double_ax = ((double)ax)/acc_sensitivity_fs_2;
-	double_ay = ((double)ay)/acc_sensitivity_fs_2;
-	double_az = ((double)az)/acc_sensitivity_fs_2;
-	double_gx = ((double)gx)/gyro_sensitivity_250;
-	double_gy = ((double)gy)/gyro_sensitivity_250;
-	double_gz = ((double)gz)/gyro_sensitivity_250;
-	
-	/* method 1 == accel works good, but pitch<->roll*/
-	pitch_gyro = (double_gy*total_useconds)/1000000;
-	roll_gyro = (double_gx*total_useconds)/1000000;
-
-	pitch_accel = atan(double_ay/sqrt(double_ax*double_ax + double_az*double_az))*180.0/PI;
-	roll_accel = atan(double_ax/double_az)*180.0/PI;
-
-	pitch = 0.98*(pitch + pitch_gyro) + 0.02*pitch_accel;
-	roll = 0.98*(roll + roll_gyro) + 0.02*roll_accel;
+	acc_data[0] = ((double)ax)/acc_sensitivity_fs_2;
+	acc_data[1] = ((double)ay)/acc_sensitivity_fs_2;
+	acc_data[2] = ((double)az)/acc_sensitivity_fs_2;
+	gyr_data[0] = ((double)gx)/gyro_sensitivity_250;
+	gyr_data[1] = ((double)gy)/gyro_sensitivity_250;
+	gyr_data[2] = ((double)gz)/gyro_sensitivity_250;
+	complementary_filter(acc_data, gyr_data, total_useconds, &pitch, &roll);
 	printf("diff: %ld    roll : %-6f    pitch : %-6f\n", total_useconds, roll, pitch);
-	/* Method 1 */
 }
 
 int main()
 {
 	setup();
-	for (;;)
+	for (;;) {
+		//usleep(40000);
 		loop();
+	}
 }
 

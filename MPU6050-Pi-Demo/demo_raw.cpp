@@ -6,6 +6,22 @@
 #include "I2Cdev.h"
 #include "MPU6050.h"
 
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+#include <wiringPi.h>
+#include <softPwm.h>
+#define PWM_RANGE		100
+
+
+/* Motors direction and enable pins */
+int enablea = 5;
+int enableb = 6;
+int a1 = 7;
+int a2 = 0;
+int b1 = 2;
+int b2 = 3;
+
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
 // AD0 low = 0x68 (default for InvenSense evaluation board)
@@ -21,6 +37,77 @@ struct timeval start, end;
 long mtime, seconds, useconds, total_useconds;
 double acc_data[3], gyr_data[3];
 double PI=(double)(3.1415926535);
+
+
+void InitMotors()
+{
+	// Set pins as outputs
+	pinMode(a1, OUTPUT);
+	pinMode(a2, OUTPUT);  
+	pinMode(b1, OUTPUT);  
+	pinMode(b2, OUTPUT); 
+
+	// Set direction to none direction
+	digitalWrite(a1,HIGH); 
+	digitalWrite(a2,HIGH); 
+	digitalWrite(b1,HIGH); 
+	digitalWrite(b2,HIGH); 
+	softPwmCreate (enablea , 0, PWM_RANGE);
+	softPwmCreate (enableb , 0, PWM_RANGE);
+}
+
+void MotorControl(double out)
+{
+	unsigned int vel = abs(out);    // Absolute value of velocity
+
+	// Sets direction
+	if (out > 0) {              // forward
+		digitalWrite(a1,HIGH);
+		digitalWrite(a2,LOW);
+		digitalWrite(b1,LOW);
+		digitalWrite(b2,HIGH);
+	} else {                     // backward
+		digitalWrite(a1,LOW);
+		digitalWrite(a2,HIGH);
+		digitalWrite(b1,HIGH);
+		digitalWrite(b2,LOW);
+	}
+
+	// Checks velocity fits the max ouptut range
+	if (vel<0)
+		vel=0;
+	if (vel > 100)
+		vel=100;
+
+	// Writes the PWM 
+	softPwmWrite (enablea, vel) ;
+	softPwmWrite (enableb, vel) ;
+
+}
+
+void motor_direction_test()
+{
+	for (;;) {
+		MotorControl(60);
+		usleep(100000);
+		MotorControl(-60);
+		usleep(100000);
+	}
+}
+
+void motor_speed_test()
+{
+	int j = 0, i = 1;
+	for (;;) {
+		j += i;
+		printf("speed = %d\n", j*20);
+		MotorControl(j*20);
+		sleep(3);
+		if (abs(j) == 5) {
+			i = -i;
+		}
+	}
+}
 
 
 void calculate_dt()
@@ -54,7 +141,7 @@ void complementary_filter(double acc_data[3], double gyr_data[3], long dt, doubl
 	*roll = *roll * 0.98 + rollAcc * 0.02;
 } 
 
-void setup() {
+void mpu6050_setup() {
 	// initialize device
 	printf("Initializing I2C devices...\n");
 	accelgyro.initialize();
@@ -67,7 +154,7 @@ void setup() {
 	gettimeofday(&start, NULL);
 }
 
-void loop() {
+void mpu6050_loop() {
 	// read raw accel/gyro measurements from device
 	accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 	calculate_dt();
@@ -84,10 +171,12 @@ void loop() {
 
 int main()
 {
-	setup();
+	//mpu6050_setup();
+	wiringPiSetup()  ;
+	InitMotors();
+
 	for (;;) {
-		//usleep(40000);
-		loop();
+		motor_speed_test();
+		//mpu6050_loop();
 	}
 }
-

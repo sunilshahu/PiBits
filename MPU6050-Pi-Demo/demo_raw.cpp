@@ -11,8 +11,11 @@
 #include <string.h>
 #include <wiringPi.h>
 #include <softPwm.h>
+#include <signal.h>
 #define PWM_RANGE		100
 
+
+#include "PID_v1.h"
 
 /* Motors direction and enable pins */
 int enablea = 5;
@@ -37,6 +40,63 @@ struct timeval start, end;
 long mtime, seconds, useconds, total_useconds;
 double acc_data[3], gyr_data[3];
 double PI=(double)(3.1415926535);
+
+unsigned  int tmp_print = 0;
+
+void mpu6050_loop();
+/**** PID Stuff ****/
+
+//Define Variables we'll be connecting to
+double Setpoint = -1.3, Input, Output;
+
+//Define the aggressive and conservative Tuning Parameters
+double aggKp=10, aggKi=2, aggKd=1;
+double consKp=1, consKi=0.05, consKd=0.25;
+
+//Specify the links and initial tuning parameters
+PID myPID(&Input, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
+double gap;
+bool pid_status;
+
+/*Always do pid_setup after mpu6050_setup*/
+void pid_setup()
+{
+	mpu6050_loop();
+	//initialize the variables we're linked to
+	Input = pitch;
+	Setpoint = -1.3;
+	
+	//turn the PID on
+	myPID.SetMode(AUTOMATIC);
+  	myPID.SetOutputLimits(-PWM_RANGE, PWM_RANGE);
+}
+void pid_loop()
+{
+  Input = pitch;
+
+  gap = abs(Setpoint-Input); //distance away from setpoint
+//  if (gap < 10)
+  if (0)
+  {  //we're close to setpoint, use conservative tuning parameters
+    myPID.SetTunings(consKp, consKi, consKd);
+  }
+  else
+  {
+     //we're far from setpoint, use aggressive tuning parameters
+     myPID.SetTunings(aggKp, aggKi, aggKd);
+  }
+
+  pid_status = myPID.Compute();
+
+  if (!pid_status)
+  {
+	printf("No PID!!!\n");
+  }
+  //analogWrite(PIN_OUTPUT, Output);
+}
+/**** PID Stuff ends ****/
+
+
 
 
 void InitMotors()
@@ -157,7 +217,6 @@ void mpu6050_setup() {
 void mpu6050_loop() {
 	// read raw accel/gyro measurements from device
 	accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-	calculate_dt();
 
 	acc_data[0] = ((double)ax)/acc_sensitivity_fs_2;
 	acc_data[1] = ((double)ay)/acc_sensitivity_fs_2;
@@ -166,17 +225,65 @@ void mpu6050_loop() {
 	gyr_data[1] = ((double)gy)/gyro_sensitivity_250;
 	gyr_data[2] = ((double)gz)/gyro_sensitivity_250;
 	complementary_filter(acc_data, gyr_data, total_useconds, &pitch, &roll);
-	printf("diff: %ld    roll : %-6f    pitch : %-6f\n", total_useconds, roll, pitch);
+	tmp_print++;
+	if (tmp_print == 10) {
+		printf("diff: %ld    roll : %-6f    pitch : %-6f\n", total_useconds, roll, pitch);
+	//	printf ("Gap = %f  Out = %f\n" , gap, Output);
+//		printf ("Gap = %f  Out = %f Iterm = %f\n" , (Setpoint - Input), Output, myPID.GetITerm());
+		tmp_print = 0;
+	}
+}
+
+void signal_handler(int signo)
+{
+	if (signo == SIGINT) {
+		printf("received SIGINT\n");
+		softPwmStop(enablea);
+		softPwmStop(enableb);
+		exit(0);
+	}
 }
 
 int main()
 {
-	//mpu6050_setup();
+	int i = 0;
+	mpu6050_setup();
 	wiringPiSetup()  ;
 	InitMotors();
+	pid_setup();
+	signal(SIGINT, signal_handler);
 
 	for (;;) {
-		motor_speed_test();
-		//mpu6050_loop();
+		usleep(10000);
+		calculate_dt();
+		//motor_direction_test();
+		//motor_speed_test();
+		mpu6050_loop();
+		if (i < 2) {
+			i++;
+		//	myPID.SetSampleTime(total_useconds*1000);
+		}
+		pid_loop();
+		MotorControl(Output);
+		/*
+		if (pitch > 0) {
+			MotorControl((-Output));
+		} else {
+			MotorControl(Output);
+		}
+		*/
+		/*
+		if (pitch > 10 || pitch < (-10)) {
+			MotorControl(0);
+		} else if (pitch < 4 && pitch > 1) {
+			MotorControl(-20);
+		} else if (pitch < -1 && pitch > -4){
+			MotorControl(20);
+		} else if (pitch < 8 && pitch > 4) {
+			MotorControl(-40);
+		} else if (pitch < -4 && pitch > -8){
+			MotorControl(40);
+		}
+		*/
 	}
 }

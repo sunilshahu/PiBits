@@ -3,8 +3,8 @@
 LDLIBS_WIRINGPI    = -lwiringPi -lwiringPiDev -lpthread
 all: demo_raw demo_dmp #demo_3d
 
-HDRS = helper_3dmath.h I2Cdev.h MPU6050_6Axis_MotionApps20.h MPU6050.h #demo_3d.h
-CMN_OBJS = I2Cdev.o MPU6050.o
+HDRS = helper_3dmath.h I2Cdev.h MPU6050_6Axis_MotionApps20.h MPU6050.h PID_v1.h #demo_3d.h
+CMN_OBJS = I2Cdev.o MPU6050.o PID_v1.o
 DMP_OBJS = demo_dmp.o
 RAW_OBJS = demo_raw.o
 #D3D_OBJS = main_3d.o demo_3d.o
